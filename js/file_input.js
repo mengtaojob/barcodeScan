@@ -1,64 +1,67 @@
-$(function() {
+$(function () {
     var App = {
-        init: function() {
+        init: function () {
             App.attachListeners();
         },
-        attachListeners: function() {
+        attachListeners: function () {
             var self = this;
 
-            $(".controls input[type=file]").on("change", function(e) {
+            $(".controls input[type=file]").on("change", function (e) {
                 if (e.target.files && e.target.files.length) {
                     App.decode(URL.createObjectURL(e.target.files[0]));
                 }
+                //重置重试标记
+                if (App.state.retry) App.state.retry = false
+                if (App.state.retrySuccess) App.state.retrySuccess = false
             });
 
-            $(".controls button").on("click", function(e) {
+            $(".controls button").on("click", function (e) {
                 var input = document.querySelector(".controls input[type=file]");
                 if (input.files && input.files.length) {
                     App.decode(URL.createObjectURL(input.files[0]));
                 }
             });
 
-            $(".controls .reader-config-group").on("change", "input, select", function(e) {
+            $(".controls .reader-config-group").on("change", "input, select", function (e) {
                 e.preventDefault();
                 var $target = $(e.target),
                     value = $target.attr("type") === "checkbox" ? $target.prop("checked") : $target.val(),
                     name = $target.attr("name"),
                     state = self._convertNameToState(name);
 
-                console.log("Value of "+ state + " changed to " + value);
+                console.log("Value of " + state + " changed to " + value);
                 self.setState(state, value);
             });
         },
-        _accessByPath: function(obj, path, val) {
+        _accessByPath: function (obj, path, val) {
             var parts = path.split('.'),
                 depth = parts.length,
                 setter = (typeof val !== "undefined") ? true : false;
 
-            return parts.reduce(function(o, key, i) {
+            return parts.reduce(function (o, key, i) {
                 if (setter && (i + 1) === depth) {
                     o[key] = val;
                 }
                 return key in o ? o[key] : {};
             }, obj);
         },
-        _convertNameToState: function(name) {
-            return name.replace("_", ".").split("-").reduce(function(result, value) {
+        _convertNameToState: function (name) {
+            return name.replace("_", ".").split("-").reduce(function (result, value) {
                 return result + value.charAt(0).toUpperCase() + value.substring(1);
             });
         },
-        detachListeners: function() {
+        detachListeners: function () {
             $(".controls input[type=file]").off("change");
             $(".controls .reader-config-group").off("change", "input, select");
             $(".controls button").off("click");
         },
-        decode: function(src) {
+        decode: function (src) {
             var self = this,
-                config = $.extend({}, self.state, {src: src});
+                config = $.extend({}, self.state, { src: src });
 
-            Quagga.decodeSingle(config, function(result) {});
+            Quagga.decodeSingle(config, function (result) { });
         },
-        setState: function(path, value) {
+        setState: function (path, value) {
             var self = this;
 
             if (typeof self._accessByPath(self.inputMapper, path) === "function") {
@@ -71,17 +74,51 @@ $(function() {
             App.detachListeners();
             App.init();
         },
+        retryFn: function () {
+            App.state.retry = true
+            var input = document.querySelector(".controls input[type=file]");
+            if (input.files && input.files.length) {
+                //every state
+                var resolutions = [], patchSize = [], i;
+                var parentDom = $('select[name=input-stream_size]')[0];
+                var parentLength = parentDom.children.length;
+                for (i = 0; i < parentLength; i++) {
+                    resolutions.push(parentDom.children[i].value);
+                }
+                i = 0;
+                var parentDom2 = $('select[name=locator_patch-size]')[0];
+                var parentLength2 = parentDom2.children.length;
+                for (i; i < parentLength2; i++) {
+                    patchSize.push(parentDom2.children[i].value);
+                }
+                i = 0;
+                var j;
+                for (i; i < parentLength; i++) {
+                    var value1 = resolutions[i]
+                    App.setState('input-stream_size', value1);
+                    for (j = 0; j < parentLength2; j++) {
+                        var value2 = patchSize[j]
+                        App.setState('locator_patch-size', value2);
+                        App.decode(URL.createObjectURL(input.files[0]));
+                        console.log('retry: i=' + i + ', j=' + j)
+                        if (App.state.retrySuccess) {
+                            return
+                        }
+                    }
+                }
+            }
+        },
         inputMapper: {
             inputStream: {
-                size: function(value){
+                size: function (value) {
                     return parseInt(value);
                 }
             },
-            numOfWorkers: function(value) {
+            numOfWorkers: function (value) {
                 return parseInt(value);
             },
             decoder: {
-                readers: function(value) {
+                readers: function (value) {
                     if (value === 'ean_extended') {
                         return [{
                             format: "ean_reader",
@@ -115,23 +152,25 @@ $(function() {
                 }]
             },
             locate: true,
-            src: null
+            src: null,
+            retry: false,
+            retrySuccess: false
         }
     };
 
     App.init();
 
-    function calculateRectFromArea(canvas, area) {
+    function calculateRectFromArea (canvas, area) {
         var canvasWidth = canvas.width,
             canvasHeight = canvas.height,
-            top = parseInt(area.top)/100,
-            right = parseInt(area.right)/100,
-            bottom = parseInt(area.bottom)/100,
-            left = parseInt(area.left)/100;
+            top = parseInt(area.top) / 100,
+            right = parseInt(area.right) / 100,
+            bottom = parseInt(area.bottom) / 100,
+            left = parseInt(area.left) / 100;
 
         top *= canvasHeight;
-        right = canvasWidth - canvasWidth*right;
-        bottom = canvasHeight - canvasHeight*bottom;
+        right = canvasWidth - canvasWidth * right;
+        bottom = canvasHeight - canvasHeight * bottom;
         left *= canvasWidth;
 
         return {
@@ -142,7 +181,7 @@ $(function() {
         };
     }
 
-    Quagga.onProcessed(function(result) {
+    Quagga.onProcessed(function (result) {
         var drawingCtx = Quagga.canvas.ctx.overlay,
             drawingCanvas = Quagga.canvas.dom.overlay,
             area;
@@ -153,16 +192,16 @@ $(function() {
                 result.boxes.filter(function (box) {
                     return box !== result.box;
                 }).forEach(function (box) {
-                    Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                    Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "green", lineWidth: 2 });
                 });
             }
 
             if (result.box) {
-                Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "#00F", lineWidth: 2 });
             }
 
             if (result.codeResult && result.codeResult.code) {
-                Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                Quagga.ImageDebug.drawPath(result.line, { x: 'x', y: 'y' }, drawingCtx, { color: 'red', lineWidth: 3 });
             }
 
             if (App.state.inputStream.area) {
@@ -170,10 +209,20 @@ $(function() {
                 drawingCtx.strokeStyle = "#0F0";
                 drawingCtx.strokeRect(area.x, area.y, area.width, area.height);
             }
-    }
+            //标记重试成功
+            if (App.state.retry) {
+                App.state.retrySuccess = true
+            }
+        }
+        //重试
+        if (!result || !result.codeResult) {
+            if (!App.state.retry) {
+                App.retryFn()
+            }
+        }
     });
 
-    Quagga.onDetected(function(result) {
+    Quagga.onDetected(function (result) {
         var code = result.codeResult.code,
             $node,
             canvas = Quagga.canvas.dom.image;
