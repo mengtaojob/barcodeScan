@@ -210,7 +210,7 @@ $(function () {
                 drawingCtx.strokeRect(area.x, area.y, area.width, area.height);
             }
             //标记重试成功
-            if (App.state.retry) {
+            if (result.codeResult && App.state.retry) {
                 App.state.retrySuccess = true
             }
         }
